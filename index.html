@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ប្រព័ន្ធគ្រប់គ្រងការងារនាយកដ្ឋាន</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Battambang:wght@400;700&family=Moul&family=Suwannaphum:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Battambang', 'sans-serif'],
+                        heading: ['Moul', 'cursive'],
+                    },
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#475569',
+                        bglight: '#f8fafc',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body { font-family: 'Battambang', sans-serif; background-color: #f8fafc; overflow: hidden; }
+        h1, h2, h3, .font-heading { font-family: 'Moul', cursive; }
+        
+        .kanban-col { min-height: 150px; transition: background-color 0.2s ease; }
+        .kanban-col.drag-over { background-color: #f1f5f9; border: 2px dashed #94a3b8; }
+        
+        .task-card { cursor: grab; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .task-card:active { cursor: grabbing; transform: scale(1.02); }
+        .task-card.dragging { opacity: 0.5; transform: scale(0.95); }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .snap-container { scroll-snap-type: x mandatory; scroll-behavior: smooth; }
+        .snap-item { scroll-snap-align: center; }
+    </style>
+</head>
+<body class="text-gray-800 h-[100dvh] flex flex-col w-full relative">
+
+    <!-- ផ្ទាំង Login លោតពីមុខ -->
+    <div id="loginOverlay" class="fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center transition-opacity duration-500">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full w-[90%] text-center transform scale-100 transition-transform">
+            <div class="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-5 text-4xl shadow-inner">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <h2 class="text-2xl font-bold font-heading text-blue-900 mb-2">ប្រព័ន្ធគ្រប់គ្រងការងារ</h2>
+            <p class="text-sm text-gray-500 mb-6 font-medium">សូមបញ្ចូលឈ្មោះគណនី និងលេខសម្ងាត់របស់អ្នកដើម្បីចូលប្រើប្រព័ន្ធ។</p>
+            
+            <form onsubmit="handleLogin(event)">
+                <input type="text" id="loginUsername" required placeholder="បញ្ចូលឈ្មោះគណនី (Username)..." class="w-full border border-gray-200 rounded-xl px-4 py-3 mb-3 bg-gray-50 outline-none focus:border-blue-500 transition-colors text-sm font-bold">
+                <input type="password" id="loginPassword" required placeholder="បញ្ចូលលេខសម្ងាត់ (Password)..." class="w-full border border-gray-200 rounded-xl px-4 py-3 mb-5 bg-gray-50 outline-none focus:border-blue-500 transition-colors text-sm font-bold">
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+                    ចូលប្រើប្រព័ន្ធ <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <header class="bg-white shadow-sm z-20 border-b border-gray-200 flex-shrink-0">
+        <div class="px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row justify-between md:items-center w-full gap-3 md:gap-2">
+            
+            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
+                <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg shadow-md flex items-center gap-2 transition-transform transform hover:scale-105 whitespace-nowrap w-full sm:w-auto justify-center">
+                    <i class="fa-solid fa-plus"></i> <span class="mt-1 font-bold text-sm">បន្ថែមការងារថ្មី</span>
+                </button>
+
+                <div class="flex items-center w-full sm:w-auto bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
+                    <i class="fa-solid fa-filter text-blue-500 mr-2"></i>
+                    <select id="filterAssignee" onchange="filterTasks()" class="bg-transparent border-none outline-none font-bold text-sm text-gray-700 w-full sm:min-w-[220px] cursor-pointer">
+                        <option value="all">-- បង្ហាញអ្នកទទួលបន្ទុកទាំងអស់ --</option>
+                        <optgroup label="ប្រធាននាយកដ្ឋាន" id="filter-opt-head"></optgroup>
+                        <optgroup label="អនុប្រធាននាយកដ្ឋាន" id="filter-opt-deputy"></optgroup>
+                        <optgroup label="ប្រធានការិយាល័យ" id="filter-opt-office"></optgroup>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto border-t md:border-none pt-2 md:pt-0 border-gray-100">
+                <div class="flex items-center gap-2 mr-1 sm:mr-4">
+                    <div class="bg-blue-100 text-blue-700 p-1.5 md:p-2 rounded-lg shadow-sm">
+                        <i class="fa-solid fa-list-check text-lg md:text-xl"></i>
+                    </div>
+                    <h1 class="text-base md:text-xl text-blue-900 leading-tight mt-1 font-heading hidden sm:block">ប្រព័ន្ធគ្រប់គ្រងការងារ</h1>
+                </div>
+
+                <div class="flex items-center gap-1.5 bg-gray-50 border border-gray-200 py-1.5 px-3 rounded-xl shadow-sm">
+                    <div class="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold mr-1">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <span id="currentLoggedUser" class="text-sm font-bold text-gray-700 hidden sm:block">...</span>
+                    <div class="h-4 w-[1px] bg-gray-300 mx-1"></div>
+                    
+                    <button id="btnManageUsers" onclick="openUserManagement()" class="text-gray-500 hover:text-blue-600 p-1.5 rounded-md transition-colors hidden" title="គ្រប់គ្រងគណនី">
+                        <i class="fa-solid fa-users-gear text-lg"></i>
+                    </button>
+                    <button onclick="logoutApp()" class="text-gray-500 hover:text-red-600 p-1.5 rounded-md transition-colors" title="ចាកចេញ (Logout)">
+                        <i class="fa-solid fa-right-from-bracket text-lg"></i>
+                    </button>
+                </div>
+                
+                <button onclick="toggleSidebar()" class="lg:hidden text-gray-600 hover:text-blue-600 bg-gray-100 p-2 rounded-md transition-colors">
+                    <i class="fa-solid fa-bars text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden relative w-full">
+        <div id="sidebarOverlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-30 hidden lg:hidden transition-opacity opacity-0"></div>
+
+        <aside id="sidebar" class="fixed lg:relative inset-y-0 right-0 lg:right-auto lg:left-0 transform translate-x-full lg:translate-x-0 w-[280px] bg-white border-l lg:border-l-0 lg:border-r border-gray-200 shadow-2xl lg:shadow-none flex-shrink-0 flex flex-col overflow-y-auto z-40 transition-transform duration-300">
+            <!-- ផ្នែកក្បាល Sidebar -->
+            <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center sticky top-0 z-10 shrink-0">
+                <h2 class="text-sm md:text-base text-gray-800 font-bold font-heading"><i class="fa-solid fa-sitemap mr-2 text-blue-500"></i>រចនាសម្ព័ន្ធគ្រប់គ្រង</h2>
+                <div class="flex items-center gap-2">
+                    <button onclick="openAddMemberModal()" class="text-blue-600 hover:text-blue-800 bg-blue-100 hover:bg-blue-200 p-1.5 px-2.5 rounded-md transition-colors text-xs font-bold shadow-sm border border-blue-200" title="បន្ថែមបុគ្គលិកថ្មី"><i class="fa-solid fa-user-plus"></i></button>
+                    <button onclick="toggleSidebar()" class="lg:hidden text-gray-500 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+            </div>
+            
+            <!-- ផ្នែកកណ្តាល (បញ្ជីរាយនាមបុគ្គលិក) -->
+            <div class="p-4 flex-1 overflow-y-auto">
+                <div class="mb-4">
+                    <div class="flex flex-col gap-2 mb-3 p-3 bg-blue-50 rounded-xl border border-blue-100 shadow-sm">
+                        <div class="flex items-center gap-2 text-blue-800 font-bold text-[13px] uppercase tracking-wider">
+                            <i class="fa-solid fa-user-tie text-blue-600 text-lg"></i>
+                            <span class="mt-0.5">ប្រធាននាយកដ្ឋាន</span>
+                        </div>
+                        <div id="sidebar-head-container" class="space-y-1"></div>
+                    </div>
+                    
+                    <div class="ml-4 pl-4 border-l-2 border-blue-200">
+                        <div class="mb-4 mt-3">
+                            <div class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <i class="fa-solid fa-users"></i> អនុប្រធាននាយកដ្ឋាន
+                            </div>
+                            <ul id="sidebar-list-deputy" class="space-y-1 text-[13px] font-bold text-gray-700"></ul>
+                        </div>
+                        <div class="mb-2 mt-4">
+                            <div class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <i class="fa-solid fa-building-user"></i> ប្រធានការិយាល័យ
+                            </div>
+                            <ul id="sidebar-list-office" class="space-y-1 text-[13px] font-bold text-gray-700"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ផ្នែកខាងក្រោម (គ្រប់គ្រងប្រព័ន្ធ) -->
+            <div class="p-4 mt-auto border-t border-gray-200 bg-gray-50 shrink-0">
+                <button id="btnSidebarManageUsers" onclick="openUserManagement()" class="w-full mb-2 bg-slate-700 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm active:scale-95 hidden">
+                    <i class="fa-solid fa-users-gear"></i> គ្រប់គ្រងគណនី (Admin)
+                </button>
+                <button onclick="logoutApp()" class="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2.5 px-4 rounded-xl transition-all border border-red-200 flex items-center justify-center gap-2 text-sm active:scale-95">
+                    <i class="fa-solid fa-right-from-bracket"></i> ចាកចេញពីប្រព័ន្ធ
+                </button>
+            </div>
+        </aside>
+
+        <main class="flex-1 overflow-hidden flex flex-col bg-slate-50 w-full relative">
+            <div id="toast-container" class="absolute top-4 right-4 md:right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+            <div class="flex-1 overflow-x-auto overflow-y-hidden snap-container p-4 md:p-6 w-full h-full">
+                <div class="flex h-full min-w-full items-stretch gap-4 md:gap-6">
+                    
+                    <div class="w-[85vw] sm:w-[320px] md:w-0 md:flex-1 shrink-0 snap-item flex flex-col h-full bg-gray-200/60 rounded-2xl border border-gray-200 shadow-sm">
+                        <div class="p-3.5 bg-white/70 rounded-t-2xl border-b border-gray-200 flex justify-between items-center backdrop-blur-md">
+                            <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2 tracking-wide font-heading">
+                                <div class="w-2.5 h-2.5 rounded-full bg-slate-500"></div>ការងារត្រូវធ្វើ
+                            </h3>
+                            <span id="count-todo" class="bg-white border border-gray-200 text-gray-700 font-bold text-xs py-1 px-3 rounded-full shadow-sm">0</span>
+                        </div>
+                        <div id="todo" class="kanban-col flex-1 p-3 overflow-y-auto space-y-3" ondragover="allowDrop(event)" ondrop="drop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)"></div>
+                    </div>
+
+                    <div class="w-[85vw] sm:w-[320px] md:w-0 md:flex-1 shrink-0 snap-item flex flex-col h-full bg-blue-50/70 rounded-2xl border border-blue-100 shadow-sm">
+                        <div class="p-3.5 bg-white/70 rounded-t-2xl border-b border-blue-100 flex justify-between items-center backdrop-blur-md">
+                            <h3 class="text-sm font-bold text-blue-900 flex items-center gap-2 tracking-wide font-heading">
+                                <div class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>កំពុងអនុវត្ត
+                            </h3>
+                            <span id="count-in_progress" class="bg-blue-100 border border-blue-200 text-blue-800 font-bold text-xs py-1 px-3 rounded-full shadow-sm">0</span>
+                        </div>
+                        <div id="in_progress" class="kanban-col flex-1 p-3 overflow-y-auto space-y-3" ondragover="allowDrop(event)" ondrop="drop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)"></div>
+                    </div>
+
+                    <div class="w-[85vw] sm:w-[320px] md:w-0 md:flex-1 shrink-0 snap-item flex flex-col h-full bg-orange-50/70 rounded-2xl border border-orange-100 shadow-sm">
+                        <div class="p-3.5 bg-white/70 rounded-t-2xl border-b border-orange-100 flex justify-between items-center backdrop-blur-md">
+                            <h3 class="text-sm font-bold text-orange-900 flex items-center gap-2 tracking-wide font-heading">
+                                <div class="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]"></div>កំពុងពន្យាពេល
+                            </h3>
+                            <span id="count-delayed" class="bg-orange-100 border border-orange-200 text-orange-800 font-bold text-xs py-1 px-3 rounded-full shadow-sm">0</span>
+                        </div>
+                        <div id="delayed" class="kanban-col flex-1 p-3 overflow-y-auto space-y-3" ondragover="allowDrop(event)" ondrop="drop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)"></div>
+                    </div>
+
+                    <div class="w-[85vw] sm:w-[320px] md:w-0 md:flex-1 shrink-0 snap-item flex flex-col h-full bg-green-50/70 rounded-2xl border border-green-100 shadow-sm">
+                        <div class="p-3.5 bg-white/70 rounded-t-2xl border-b border-green-100 flex justify-between items-center backdrop-blur-md">
+                            <h3 class="text-sm font-bold text-green-900 flex items-center gap-2 tracking-wide font-heading">
+                                <div class="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>រួចរាល់/រង់ចាំពិនិត្យ
+                            </h3>
+                            <span id="count-done" class="bg-green-100 border border-green-200 text-green-800 font-bold text-xs py-1 px-3 rounded-full shadow-sm">0</span>
+                        </div>
+                        <div id="done" class="kanban-col flex-1 p-3 overflow-y-auto space-y-3" ondragover="allowDrop(event)" ondrop="drop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)"></div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal បន្ថែមការងារ -->
+    <div id="taskModal" class="fixed inset-0 bg-slate-900/70 hidden items-center justify-center z-50 opacity-0 transition-opacity duration-300 px-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[95vh] flex flex-col transform transition-transform duration-300 scale-95" id="modalContent">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl shrink-0">
+                <h3 class="text-lg text-blue-900 font-bold font-heading"><i class="fa-solid fa-file-signature mr-2"></i>បន្ថែមការងារថ្មី</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <form id="taskForm" onsubmit="saveTask(event)" class="p-6 space-y-4 overflow-y-auto hide-scrollbar flex-1">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">១. ចំណងជើងការងារ <span class="text-red-500">*</span></label>
+                    <input type="text" id="taskTitle" required placeholder="បញ្ចូលចំណងជើង..." class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white transition-all font-medium">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">២. អ្នកទទួលបន្ទុក <span class="text-red-500">*</span></label>
+                    <div class="relative">
+                        <select id="taskAssignee" required class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white cursor-pointer appearance-none transition-all font-medium text-sm">
+                            <option value="" disabled selected>-- ជ្រើសរើសបុគ្គលិក --</option>
+                            <optgroup label="ប្រធាននាយកដ្ឋាន" id="task-opt-head"></optgroup>
+                            <optgroup label="អនុប្រធាននាយកដ្ឋាន" id="task-opt-deputy"></optgroup>
+                            <optgroup label="ប្រធានការិយាល័យ" id="task-opt-office"></optgroup>
+                        </select>
+                        <i class="fa-solid fa-chevron-down absolute right-4 top-4 text-gray-400 pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">៣. ពេលវេលាចាប់ផ្តើម <span class="text-red-500">*</span></label>
+                    <input type="datetime-local" id="taskStartDate" required class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white cursor-pointer transition-all font-medium">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">៤. កាលកំណត់បញ្ចប់ការងារ <span class="text-red-500">*</span></label>
+                    <input type="datetime-local" id="taskDeadline" required class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white cursor-pointer transition-all font-medium">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">៥. ស្ថានភាពការងារ <span class="text-red-500">*</span></label>
+                    <div class="relative">
+                        <select id="taskStatus" required class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white cursor-pointer appearance-none transition-all font-medium text-sm">
+                            <option value="todo">ការងារត្រូវធ្វើ</option>
+                            <option value="in_progress">កំពុងអនុវត្ត</option>
+                            <option value="delayed">កំពុងពន្យាពេល</option>
+                            <option value="done">រួចរាល់/រង់ចាំការពិនិត្យ</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down absolute right-4 top-4 text-gray-400 pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">៦. ព័ត៌មានលម្អិត និង មតិយោបល់</label>
+                    <textarea id="taskComment" rows="2" placeholder="បញ្ចូលព័ត៌មានលម្អិត ឬមតិយោបល់ផ្សេងៗពាក់ព័ន្ធនឹងការងារនេះ..." class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white transition-all font-medium text-sm resize-none"></textarea>
+                </div>
+                
+                <div class="mt-8 flex justify-end gap-3 pt-5 border-t border-gray-100 shrink-0">
+                    <button type="button" onclick="closeModal()" class="px-5 py-2.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition-colors w-full sm:w-auto text-sm">បោះបង់</button>
+                    <button type="submit" class="px-6 py-2.5 text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-200 font-bold transition-all w-full sm:w-auto flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-save"></i> រក្សាទុក
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal មើលព័ត៌មានលម្អិត -->
+    <div id="viewTaskModal" class="fixed inset-0 bg-slate-900/70 hidden items-center justify-center z-50 opacity-0 transition-opacity duration-300 px-4" onclick="if(event.target === this) closeViewModal()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[95vh] flex flex-col transform transition-transform duration-300 scale-95" id="viewModalContent">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-blue-50/50 rounded-t-2xl shrink-0">
+                <h3 class="text-lg text-blue-900 font-bold font-heading"><i class="fa-solid fa-circle-info mr-2"></i>ព័ត៌មានលម្អិតនៃការងារ</h3>
+                <button onclick="closeViewModal()" class="text-gray-400 hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 space-y-5 overflow-y-auto hide-scrollbar flex-1">
+                <div>
+                    <h2 id="viewTaskTitle" class="text-xl font-bold text-gray-800 leading-snug"></h2>
+                </div>
+                
+                <div class="flex items-start sm:items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <div id="viewTaskAssigneeAvatar" class="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold shadow-sm shrink-0 mt-1 sm:mt-0"></div>
+                    <div class="flex-1 w-full">
+                        <div class="flex justify-between items-start w-full">
+                            <div>
+                                <p class="text-xs text-gray-500 font-bold mb-0.5">អ្នកទទួលបន្ទុក</p>
+                                <p id="viewTaskAssignee" class="text-sm font-bold text-gray-800"></p>
+                            </div>
+                            <button onclick="toggleEditContact()" class="text-[10px] bg-blue-50 text-blue-700 px-2.5 py-1.5 rounded-md hover:bg-blue-100 transition-colors border border-blue-100 font-bold flex items-center gap-1 shrink-0">
+                                <i class="fa-solid fa-user-pen"></i> កែតម្រូវ
+                            </button>
+                        </div>
+                        
+                        <div id="contactDisplayMode" class="flex flex-col sm:flex-row gap-2 mt-2">
+                            <a id="viewTaskAssigneeEmail" href="#" target="_blank" title="ចុចដើម្បីបើកកម្មវិធីផ្ញើអ៊ីមែល" class="text-[11px] text-blue-700 font-medium flex items-center bg-blue-50/80 hover:bg-blue-100 px-2.5 py-1.5 rounded border border-blue-100 transition-all w-max hover:shadow-sm"><i class="fa-solid fa-envelope mr-1.5 w-3"></i><span></span></a>
+                            <a id="viewTaskAssigneeTelegram" href="#" target="_blank" title="ចុចដើម្បីបើក Telegram" class="text-[11px] text-sky-600 font-medium flex items-center bg-sky-50/80 hover:bg-sky-100 px-2.5 py-1.5 rounded border border-sky-100 transition-all w-max hover:shadow-sm"><i class="fa-brands fa-telegram mr-1.5 w-3 text-sm"></i><span></span></a>
+                        </div>
+
+                        <div id="contactEditMode" class="hidden flex-col gap-2 mt-2 pt-2 border-t border-gray-200">
+                            <div class="flex flex-col gap-1.5">
+                                <div class="flex items-center bg-white border border-gray-300 rounded-lg px-2.5 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                                    <i class="fa-solid fa-envelope text-gray-400 text-[10px]"></i>
+                                    <input type="email" id="editEmailInput" placeholder="បញ្ចូលអ៊ីមែលថ្មី..." class="w-full text-xs px-2 py-2 outline-none bg-transparent">
+                                </div>
+                                <div class="flex items-center bg-white border border-gray-300 rounded-lg px-2.5 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                                    <i class="fa-brands fa-telegram text-gray-400 text-[11px]"></i>
+                                    <input type="text" id="editTelegramInput" placeholder="បញ្ចូល Telegram Channel (@channel ឬ Link)..." class="w-full text-xs px-2 py-2 outline-none bg-transparent">
+                                </div>
+                            </div>
+                            <div class="flex justify-end gap-2 mt-1">
+                                <button onclick="toggleEditContact()" class="px-3 py-1.5 text-[10px] text-gray-600 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold transition-colors">បោះបង់</button>
+                                <button onclick="saveContactInfo()" class="px-3 py-1.5 text-[10px] text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-bold shadow-sm transition-all flex items-center gap-1.5"><i class="fa-solid fa-save"></i> រក្សាទុក</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-blue-50/50 p-3 rounded-xl border border-blue-100 relative group">
+                        <div class="flex justify-between items-start mb-1">
+                            <p class="text-xs text-blue-600/80 font-bold flex items-center gap-1.5"><i class="fa-regular fa-calendar-check"></i> ថ្ងៃចាប់ផ្តើម</p>
+                            <button onclick="toggleEditStartDate()" id="btnEditStartDate" class="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors font-bold flex items-center gap-1"><i class="fa-solid fa-pen"></i> កែតម្រូវ</button>
+                        </div>
+                        <div id="viewStartDateDisplay">
+                            <p id="viewTaskStartDate" class="text-sm font-bold text-gray-700"></p>
+                        </div>
+                        <div id="viewStartDateEditForm" class="hidden flex-col gap-2 mt-2 pt-2 border-t border-blue-200/60">
+                            <input type="datetime-local" id="editStartDateInput" class="w-full border border-blue-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white">
+                            <div class="flex justify-end gap-1.5">
+                                <button onclick="toggleEditStartDate()" class="px-2.5 py-1 text-[10px] text-gray-600 bg-gray-200 hover:bg-gray-300 rounded font-bold transition-colors">បោះបង់</button>
+                                <button onclick="saveStartDate()" class="px-2.5 py-1 text-[10px] text-white bg-blue-600 hover:bg-blue-700 rounded font-bold shadow-sm flex items-center gap-1 transition-colors"><i class="fa-solid fa-save"></i> រក្សាទុក</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-orange-50/50 p-3 rounded-xl border border-orange-100 relative group">
+                        <div class="flex justify-between items-start mb-1">
+                            <p class="text-xs text-orange-600/80 font-bold flex items-center gap-1.5"><i class="fa-regular fa-clock"></i> កាលកំណត់បញ្ចប់</p>
+                            <button onclick="toggleEditDeadline()" id="btnEditDeadline" class="text-[10px] bg-orange-100 text-orange-700 px-2 py-1 rounded hover:bg-orange-200 transition-colors font-bold flex items-center gap-1"><i class="fa-solid fa-pen"></i> កែតម្រូវ</button>
+                        </div>
+                        
+                        <div id="viewDeadlineDisplay">
+                            <p id="viewTaskDeadline" class="text-sm font-bold text-gray-700"></p>
+                        </div>
+                        
+                        <div id="viewDeadlineEditForm" class="hidden flex-col gap-2 mt-2 pt-2 border-t border-orange-200/60">
+                            <input type="datetime-local" id="editDeadlineInput" class="w-full border border-orange-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white">
+                            <div class="flex justify-end gap-1.5">
+                                <button onclick="toggleEditDeadline()" class="px-2.5 py-1 text-[10px] text-gray-600 bg-gray-200 hover:bg-gray-300 rounded font-bold transition-colors">បោះបង់</button>
+                                <button onclick="saveDeadline()" class="px-2.5 py-1 text-[10px] text-white bg-orange-500 hover:bg-orange-600 rounded font-bold shadow-sm flex items-center gap-1 transition-colors"><i class="fa-solid fa-save"></i> រក្សាទុក</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-2">
+                    <button onclick="addToGoogleCalendar()" class="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold py-2.5 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 text-sm group">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar" class="w-5 h-5 group-hover:scale-110 transition-transform">
+                        បញ្ជូនការងារនេះទៅកាន់ Google Calendar
+                    </button>
+                    <p class="text-[10px] text-gray-500 text-center mt-1.5">* ដើម្បីឲ្យទូរស័ព្ទលោតសាររំលឹក សូមចុចប៊ូតុងនេះ រួច Save ក្នុង Calendar</p>
+                </div>
+
+                <div>
+                    <p class="text-xs text-gray-500 font-bold mb-2">ស្ថានភាពបច្ចុប្បន្ន</p>
+                    <span id="viewTaskStatus" class="bg-gray-100 border border-gray-200 text-gray-800 font-bold text-sm py-1.5 px-4 rounded-full shadow-sm inline-block"></span>
+                </div>
+
+                <div id="viewCommentSection" class="relative">
+                    <div class="flex justify-between items-center mb-2">
+                        <p class="text-xs text-gray-500 font-bold">ព័ត៌មានលម្អិត និង មតិយោបល់ពាក់ព័ន្ធ</p>
+                        <button onclick="toggleEditComment()" id="btnEditComment" class="text-[10px] bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md hover:bg-blue-100 transition-colors border border-blue-100 font-bold flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> កែតម្រូវ</button>
+                    </div>
+                    
+                    <div id="viewCommentDisplay" class="bg-yellow-50 p-3.5 rounded-xl border border-yellow-100 shadow-inner">
+                        <p id="viewTaskComment" class="text-sm text-gray-700 italic leading-relaxed"></p>
+                    </div>
+
+                    <div id="editCommentForm" class="hidden flex-col gap-2 bg-yellow-50/50 p-3 rounded-xl border border-yellow-200">
+                        <textarea id="editTaskCommentInput" rows="3" placeholder="បញ្ចូលព័ត៌មានលម្អិតថ្មី ឬកែតម្រូវ..." class="w-full border border-yellow-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-white transition-all resize-none"></textarea>
+                        <div class="flex justify-end gap-2 mt-1">
+                            <button onclick="toggleEditComment()" class="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold transition-colors">បោះបង់</button>
+                            <button onclick="saveEditedComment()" class="px-3 py-1.5 text-xs text-white bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold shadow-md shadow-yellow-200 transition-all flex items-center justify-center gap-1.5"><i class="fa-solid fa-save"></i> រក្សាទុក</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="viewProgressSection" class="hidden">
+                    <p class="text-xs text-gray-500 font-bold mb-2 flex items-center gap-1.5"><i class="fa-solid fa-clock-rotate-left"></i> ប្រវត្តិវឌ្ឍនភាព</p>
+                    <div id="progressHistoryList" class="space-y-3 bg-gray-50/50 p-3.5 rounded-xl border border-gray-100">
+                    </div>
+                </div>
+
+                <div class="bg-blue-50/30 p-4 rounded-xl border border-blue-100 mt-2">
+                    <p class="text-xs text-blue-700 font-bold mb-3 flex items-center gap-1.5"><i class="fa-solid fa-pen-to-square"></i> ធ្វើបច្ចុប្បន្នភាពវឌ្ឍនភាព និងសាររំលឹក</p>
+                    
+                    <textarea id="newProgressNote" rows="2" placeholder="សរសេរពីវឌ្ឍនភាពការងារត្រង់នេះ..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition-all resize-none mb-3"></textarea>
+                    
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <div class="flex-1 w-full relative">
+                            <label class="block text-[10px] text-gray-500 font-bold mb-1 uppercase tracking-wider">ម៉ោងរំលឹកការងារផ្ទៃក្នុង</label>
+                            <input type="datetime-local" id="newReminderDate" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white cursor-pointer">
+                        </div>
+                        <button onclick="submitProgress()" class="w-full sm:w-auto mt-4 sm:mt-5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-md shadow-blue-200 transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-paper-plane"></i> រក្សាទុក
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50/50 rounded-b-2xl shrink-0 flex justify-end">
+                <button onclick="closeViewModal()" class="px-6 py-2.5 text-gray-700 bg-white border border-gray-200 hover:bg-gray-100 rounded-xl font-bold transition-colors shadow-sm text-sm">បិទផ្ទាំង</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal បន្ថែម/កែប្រែសមាសភាពបុគ្គលិក -->
+    <div id="addMemberModal" class="fixed inset-0 bg-slate-900/70 hidden items-center justify-center z-[60] opacity-0 transition-opacity duration-300 px-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[95vh] flex flex-col transform transition-transform duration-300 scale-95" id="memberModalContent">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-blue-50/50 rounded-t-2xl shrink-0">
+                <h3 class="text-lg text-blue-900 font-bold font-heading" id="addMemberModalTitle"><i class="fa-solid fa-user-plus mr-2"></i>បន្ថែមសមាសភាពថ្មី</h3>
+                <button onclick="closeAddMemberModal()" class="text-gray-400 hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <form id="memberForm" onsubmit="saveMember(event)" class="p-6 space-y-4 overflow-y-auto hide-scrollbar flex-1">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">១. ឈ្មោះពេញ <span class="text-red-500">*</span></label>
+                    <input type="text" id="newMemberName" required placeholder="ឧ. លោក សុខ សាន្ត" class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white transition-all font-medium text-sm">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">២. តួនាទី/ឋានៈ <span class="text-red-500">*</span></label>
+                    <div class="relative">
+                        <select id="newMemberRole" required onchange="toggleOfficeInput()" class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white cursor-pointer appearance-none transition-all font-medium text-sm">
+                            <option value="head">ប្រធាននាយកដ្ឋាន</option>
+                            <option value="deputy">អនុប្រធាននាយកដ្ឋាន</option>
+                            <option value="office">ប្រធានការិយាល័យ</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down absolute right-4 top-4 text-gray-400 pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <div id="officeNameContainer" class="hidden">
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">ឈ្មោះការិយាល័យពាក់ព័ន្ធ</label>
+                    <input type="text" id="newMemberOffice" placeholder="ឧ. រដ្ឋបាល, គណនេយ្យ..." class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white transition-all font-medium text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">៣. អ៊ីមែល (Gmail)</label>
+                    <input type="email" id="newMemberEmail" placeholder="ឧ. example@gmail.com" class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white transition-all font-medium text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1.5">៤. តេឡេក្រាម (Telegram)</label>
+                    <input type="text" id="newMemberTelegram" placeholder="ឧ. +85512345678 ឬ @username" class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 focus:bg-white transition-all font-medium text-sm">
+                </div>
+                
+                <div class="mt-8 flex justify-end gap-3 pt-5 border-t border-gray-100 shrink-0">
+                    <button type="button" onclick="closeAddMemberModal()" class="px-5 py-2.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition-colors w-full sm:w-auto text-sm">បោះបង់</button>
+                    <button type="submit" class="px-6 py-2.5 text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-200 font-bold transition-all w-full sm:w-auto flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-save"></i> រក្សាទុក
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal គ្រប់គ្រងគណនី (System User Management) -->
+    <div id="userManagementModal" class="fixed inset-0 bg-slate-900/70 hidden items-center justify-center z-[70] opacity-0 transition-opacity duration-300 px-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col transform transition-transform duration-300 scale-95" id="userManagementContent">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-slate-50 rounded-t-2xl shrink-0">
+                <h3 class="text-lg text-slate-800 font-bold font-heading"><i class="fa-solid fa-users-gear mr-2 text-blue-600"></i>គ្រប់គ្រងគណនីចូលប្រព័ន្ធ (System Users)</h3>
+                <button onclick="closeUserManagement()" class="text-gray-400 hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 flex-1 overflow-y-auto flex flex-col md:flex-row gap-6">
+                <div class="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-gray-200 pb-6 md:pb-0 md:pr-6">
+                    <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2"><i class="fa-solid fa-user-plus text-blue-500"></i> បង្កើតគណនីថ្មី</h4>
+                    <form onsubmit="saveSystemUser(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">ឈ្មោះគណនី (Username) *</label>
+                            <input type="text" id="sysUsername" required placeholder="ឧ. admin2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">លេខសម្ងាត់ (Password) *</label>
+                            <input type="text" id="sysPassword" required placeholder="បញ្ចូលលេខសម្ងាត់..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">ប្រភេទសិទ្ធិ (Role) *</label>
+                            <select id="sysRole" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                                <option value="admin">Admin (មានសិទ្ធិពេញ)</option>
+                                <option value="user">User (ចូលមើលធម្មតា)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">ភ្ជាប់ជាមួយឈ្មោះបុគ្គលិក (សម្រាប់ User) *</label>
+                            <select id="sysLinkedMember" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                                <option value="all">-- Admin មើលឃើញទាំងអស់ --</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg text-sm shadow-md transition-colors"><i class="fa-solid fa-save mr-1"></i> រក្សាទុកគណនី</button>
+                    </form>
+                </div>
+                
+                <div class="w-full md:w-2/3">
+                    <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2"><i class="fa-solid fa-list text-blue-500"></i> បញ្ជីគណនីក្នុងប្រព័ន្ធ</h4>
+                    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
+                                    <th class="p-3 font-bold">Username</th>
+                                    <th class="p-3 font-bold">Role</th>
+                                    <th class="p-3 font-bold text-center">សកម្មភាព</th>
+                                </tr>
+                            </thead>
+                            <tbody id="systemUserList" class="text-sm divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl shrink-0 flex justify-end">
+                <button onclick="closeUserManagement()" class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 rounded-xl font-bold transition-colors shadow-sm text-sm">បិទផ្ទាំង</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === ទិន្នន័យគណនីប្រព័ន្ធ (System Users) ===
+        let systemUsers = JSON.parse(localStorage.getItem('kanban_sys_users')) || [
+            { username: 'admin', password: '12345', role: 'admin', linkedMember: 'all' }
+        ];
+
+        let currentLoggedUser = null;
+
+        function saveSystemUsers() {
+            localStorage.setItem('kanban_sys_users', JSON.stringify(systemUsers));
+        }
+
+        // === ទិន្នន័យបុគ្គលិក (App Members) ===
+        const defaultMembers = [
+            { name: 'លោក វន់ វណ្ណរត្ន', role: 'head', office: '', email: '', telegram: '' },
+            { name: 'លោក ជី សុចិន្តា', role: 'deputy', office: '', email: 'chysochenda68@gmail.com', telegram: '+85512886166' },
+            { name: 'លោក ហង់ ជួនចំរ៉ុង', role: 'deputy', office: '', email: 'hangchuonchamrong@gmail.com', telegram: '@hangchuon_channel' },
+            { name: 'លោក ឈុប ថាវិត', role: 'deputy', office: '', email: 'chupthavit@gmail.com', telegram: '@chupthavit_channel' },
+            { name: 'លោក ឃាង ប្រណិត', role: 'deputy', office: '', email: 'kheangpranith@gmail.com', telegram: '@kheangpranith_channel' },
+            { name: 'លោក អឿន សុភ័ណ្ឌ', role: 'office', office: 'រដ្ឋបាល', email: 'oeun.sophann@gmail.com', telegram: '@oeun_sophann_channel' },
+            { name: 'លោក ម៉ែន សុទ្ធី', role: 'office', office: 'ស្ថិតិកសិកម្ម', email: 'men.sothy@gmail.com', telegram: '@men_sothy_channel' },
+            { name: 'លោក មៀច យ៉ាឌី', role: 'office', office: 'ទីផ្សារកសិកម្ម', email: 'miechyady@gmail.com', telegram: '@miechyady_channel' },
+            { name: 'លោក អ៊ិត ចំណាន', role: 'office', office: 'វាយតម្លៃបរិស្ថាន', email: 'itchamnan@gmail.com', telegram: '@itchamnan_channel' },
+            { name: 'លោក សោម ដារ៉ា', role: 'office', office: 'តាមដានគម្រោង', email: 'somdara@gmail.com', telegram: '@somdara_channel' },
+            { name: 'លោក ហេង លីហុង', role: 'office', office: 'ផែនការ', email: 'henglyhong@gmail.com', telegram: '@henglyhong_channel' }
+        ];
+
+        let appMembers = JSON.parse(localStorage.getItem('kanban_members_list_v3'));
+        
+        // Setup លើកដំបូង បើគ្មានទិន្នន័យ
+        if (!appMembers) {
+            appMembers = defaultMembers;
+            localStorage.setItem('kanban_members_list_v3', JSON.stringify(appMembers));
+        }
+        
+        // ធានាថាមានគណនី Director លំនាំដើមដើម្បីប្រើប្រាស់ (មើលរួមជា Admin)
+        if (!systemUsers.some(u => u.username === 'director')) {
+            systemUsers.push({ username: 'director', password: '12345', role: 'admin', linkedMember: 'លោក វន់ វណ្ណរត្ន' });
+            saveSystemUsers();
+        }
+
+        // ធានាថាមានគណនី User ធម្មតាសម្រាប់ ប្រធាននាយកដ្ឋាន ដើម្បីឲ្យគាត់បញ្ចូលវឌ្ឍនភាពផ្ទាល់ខ្លួនបាន
+        if (!systemUsers.some(u => u.username === 'vannrath' && u.role === 'user')) {
+            systemUsers.push({ username: 'vannrath', password: '12345', role: 'user', linkedMember: 'លោក វន់ វណ្ណរត្ន' });
+            saveSystemUsers();
+        }
+
+        let assigneeEmails = {};
+        let assigneeTelegram = {};
+        
+        // === ទិន្នន័យការងារ (Tasks) ===
+        let tasks = JSON.parse(localStorage.getItem('kanban_tasks')) || [];
+
+        let draggedTask = null;
+        let currentFilter = 'all'; 
+        let currentViewingTaskId = null;
+        const columnsOrder = ['todo', 'in_progress', 'delayed', 'done'];
+        const statusLabels = { 'todo': 'ការងារត្រូវធ្វើ', 'in_progress': 'កំពុងអនុវត្ត', 'delayed': 'កំពុងពន្យាពេល', 'done': 'រួចរាល់/រង់ចាំការពិនិត្យ' };
+        let editingMemberName = null;
+        let alertHistory = new Set(); 
+
+        function saveTasksToStorage() { localStorage.setItem('kanban_tasks', JSON.stringify(tasks)); }
+        function saveMembersToStorage() { localStorage.setItem('kanban_members_list_v3', JSON.stringify(appMembers)); }
+
+        window.handleLogin = function(e) {
+            e.preventDefault();
+            const userIn = document.getElementById('loginUsername').value.trim();
+            const passIn = document.getElementById('loginPassword').value.trim();
+
+            let matchedUser = systemUsers.find(u => u.username === userIn && u.password === passIn);
+
+            if (matchedUser) {
+                currentLoggedUser = matchedUser;
+                document.getElementById('currentLoggedUser').textContent = matchedUser.username.toUpperCase();
+                
+                const btnManageHeader = document.getElementById('btnManageUsers');
+                const btnManageSidebar = document.getElementById('btnSidebarManageUsers');
+                const filterSelect = document.getElementById('filterAssignee');
+                const btnAddMember = document.querySelector('button[onclick="openAddMemberModal()"]');
+
+                if(matchedUser.role === 'admin') {
+                    if(btnManageHeader) btnManageHeader.classList.remove('hidden');
+                    if(btnManageSidebar) btnManageSidebar.classList.remove('hidden');
+                    if(btnAddMember) btnAddMember.classList.remove('hidden');
+                    if(filterSelect) {
+                        filterSelect.disabled = false;
+                        filterSelect.classList.remove('bg-gray-200', 'cursor-not-allowed', 'opacity-50');
+                        currentFilter = 'all';
+                        filterSelect.value = 'all';
+                    }
+                } else {
+                    if(btnManageHeader) btnManageHeader.classList.add('hidden');
+                    if(btnManageSidebar) btnManageSidebar.classList.add('hidden');
+                    if(btnAddMember) btnAddMember.classList.add('hidden');
+                    if(filterSelect) {
+                        currentFilter = matchedUser.linkedMember || matchedUser.username;
+                        filterSelect.value = currentFilter;
+                        filterSelect.disabled = true;
+                        filterSelect.classList.add('bg-gray-200', 'cursor-not-allowed', 'opacity-50');
+                    }
+                }
+
+                const overlay = document.getElementById('loginOverlay');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                    document.getElementById('loginUsername').value = '';
+                    document.getElementById('loginPassword').value = '';
+                }, 500);
+                
+                renderMembers();
+                renderTasks();
+                showToast(`សូមស្វាគមន៍ ${matchedUser.username}!`, 'success');
+            } else {
+                showToast('ឈ្មោះគណនី ឬលេខសម្ងាត់មិនត្រឹមត្រូវទេ!', 'error');
+            }
+        };
+
+        window.logoutApp = function() {
+            currentLoggedUser = null;
+            const overlay = document.getElementById('loginOverlay');
+            overlay.classList.remove('hidden');
+            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+            showToast('បានចាកចេញពីប្រព័ន្ធ', 'info');
+        };
+
+        window.openUserManagement = function() {
+            const linkSelect = document.getElementById('sysLinkedMember');
+            if (linkSelect) {
+                linkSelect.innerHTML = '<option value="all">-- Admin មើលឃើញទាំងអស់ --</option>';
+                appMembers.forEach(m => {
+                    linkSelect.innerHTML += `<option value="${m.name}">${m.name}</option>`;
+                });
+            }
+            renderSystemUsers();
+            const modal = document.getElementById('userManagementModal');
+            const content = document.getElementById('userManagementContent');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        };
+
+        window.closeUserManagement = function() {
+            const modal = document.getElementById('userManagementModal');
+            const content = document.getElementById('userManagementContent');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
+        };
+
+        window.renderSystemUsers = function() {
+            const tbody = document.getElementById('systemUserList');
+            tbody.innerHTML = '';
+            systemUsers.forEach(user => {
+                const isCurrent = currentLoggedUser && currentLoggedUser.username === user.username;
+                const linkedName = (user.linkedMember === 'all' || !user.linkedMember) ? 'ទាំងអស់ (All)' : user.linkedMember;
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50 border-b border-gray-100 transition-colors">
+                        <td class="p-3 font-bold text-gray-700">${user.username} ${isCurrent ? '<span class="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded ml-1 border border-green-200 shadow-sm">កំពុងប្រើ</span>' : ''}</td>
+                        <td class="p-3">
+                            <span class="text-[11px] font-bold px-2 py-1 rounded shadow-sm ${user.role === 'admin' ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-gray-100 text-gray-700 border border-gray-200'}">${user.role.toUpperCase()}</span>
+                            <div class="text-[10px] text-gray-500 mt-1 break-words w-max max-w-[120px]">ភ្ជាប់នឹង៖ ${linkedName}</div>
+                        </td>
+                        <td class="p-3 text-center flex justify-center gap-2">
+                            <button onclick="resetUserPassword('${user.username}', this)" class="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2.5 py-1.5 rounded shadow-sm font-bold transition-colors" title="ប្តូរលេខសម្ងាត់"><i class="fa-solid fa-key"></i></button>
+                            ${!isCurrent ? `<button onclick="confirmDeleteSystemUser('${user.username}', this)" class="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2.5 py-1.5 rounded shadow-sm font-bold transition-colors" title="លុបគណនី"><i class="fa-solid fa-trash"></i></button>` : `<div class="w-7 h-7"></div>`}
+                        </td>
+                    </tr>
+                `;
+            });
+        };
+
+        window.saveSystemUser = function(e) {
+            e.preventDefault();
+            const username = document.getElementById('sysUsername').value.trim();
+            const password = document.getElementById('sysPassword').value.trim();
+            const role = document.getElementById('sysRole').value;
+            const linkedMember = document.getElementById('sysLinkedMember') ? document.getElementById('sysLinkedMember').value : 'all';
+
+            if (systemUsers.some(u => u.username === username)) {
+                showToast('ឈ្មោះគណនីនេះមានរួចហើយនៅក្នុងប្រព័ន្ធ!', 'error');
+                return;
+            }
+            systemUsers.push({ username, password, role, linkedMember });
+            saveSystemUsers();
+            renderSystemUsers();
+            
+            document.getElementById('sysUsername').value = '';
+            document.getElementById('sysPassword').value = '';
+            showToast('បានបង្កើតគណនីថ្មីរួចរាល់!', 'success');
+        };
+
+        window.confirmDeleteSystemUser = function(username, btnElement) {
+            const tr = btnElement.closest('tr');
+            tr.innerHTML = `
+                <td colspan="3" class="p-3 text-center bg-red-50 border-b border-red-100">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-3 py-1">
+                        <span class="text-xs font-bold text-red-600"><i class="fa-solid fa-triangle-exclamation mr-1"></i> តើចង់លុប "${username}" មែនទេ?</span>
+                        <div class="flex gap-2">
+                            <button onclick="executeDeleteSystemUser('${username}')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm transition-colors">លុបចេញ</button>
+                            <button onclick="renderSystemUsers()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold transition-colors">បោះបង់</button>
+                        </div>
+                    </div>
+                </td>
+            `;
+        };
+
+        window.executeDeleteSystemUser = function(username) {
+            systemUsers = systemUsers.filter(u => u.username !== username);
+            saveSystemUsers();
+            renderSystemUsers();
+            showToast('បានលុបគណនីចេញពីប្រព័ន្ធរួចរាល់!', 'info');
+        };
+
+        window.resetUserPassword = function(username, btnElement) {
+            const tr = btnElement.closest('tr');
+            tr.innerHTML = `
+                <td colspan="3" class="p-3 bg-yellow-50 border-b border-yellow-100">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-3 py-1">
+                        <span class="text-xs font-bold text-yellow-800">លេខសម្ងាត់ថ្មី:</span>
+                        <input type="text" id="newPassInput" placeholder="បញ្ចូលលេខសម្ងាត់..." class="border border-yellow-300 px-3 py-1.5 rounded text-xs w-full sm:w-32 focus:outline-none focus:border-yellow-500 bg-white">
+                        <div class="flex gap-2 w-full sm:w-auto justify-center">
+                            <button onclick="saveNewPassword('${username}')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm transition-colors w-full sm:w-auto">រក្សាទុក</button>
+                            <button onclick="renderSystemUsers()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold transition-colors w-full sm:w-auto">បោះបង់</button>
+                        </div>
+                    </div>
+                </td>
+            `;
+            document.getElementById('newPassInput').focus();
+        };
+
+        window.saveNewPassword = function(username) {
+            const newPass = document.getElementById('newPassInput').value;
+            if(newPass && newPass.trim() !== '') {
+                const user = systemUsers.find(u => u.username === username);
+                if(user) {
+                    user.password = newPass.trim();
+                    saveSystemUsers();
+                    renderSystemUsers();
+                    showToast('លេខសម្ងាត់ត្រូវបានផ្លាស់ប្តូរដោយជោគជ័យ!', 'success');
+                }
+            } else {
+                showToast('សូមបញ្ចូលលេខសម្ងាត់ថ្មី!', 'warning');
+            }
+        };
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar.classList.contains('translate-x-full')) {
+                sidebar.classList.remove('translate-x-full');
+                overlay.classList.remove('hidden');
+                setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+            } else {
+                sidebar.classList.add('translate-x-full');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => overlay.classList.add('hidden'), 300);
+            }
+        }
+
+        function openAddMemberModal() {
+            editingMemberName = null;
+            document.getElementById('memberForm').reset();
+            document.getElementById('officeNameContainer').classList.add('hidden');
+            document.getElementById('addMemberModalTitle').innerHTML = `<i class="fa-solid fa-user-plus mr-2"></i>បន្ថែមសមាសភាពថ្មី`;
+            
+            const modal = document.getElementById('addMemberModal');
+            const content = document.getElementById('memberModalContent');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function closeAddMemberModal() {
+            const modal = document.getElementById('addMemberModal');
+            const content = document.getElementById('memberModalContent');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                document.getElementById('memberForm').reset();
+            }, 300);
+        }
+
+        function toggleOfficeInput() {
+            const role = document.getElementById('newMemberRole').value;
+            const officeInput = document.getElementById('officeNameContainer');
+            if (role === 'office') officeInput.classList.remove('hidden');
+            else officeInput.classList.add('hidden');
+        }
+
+        function getInitials(name) {
+            const parts = name.replace('លោក ', '').replace('លោកស្រី ', '').trim().split(' ');
+            if (parts.length >= 2) return parts[0][0] + parts[1][0];
+            return name.substring(0, 2);
+        }
+
+        function renderMembers() {
+            const containerHead = document.getElementById('sidebar-head-container');
+            const listDeputy = document.getElementById('sidebar-list-deputy');
+            const listOffice = document.getElementById('sidebar-list-office');
+            
+            const filterHead = document.getElementById('filter-opt-head');
+            const filterDep = document.getElementById('filter-opt-deputy');
+            const filterOff = document.getElementById('filter-opt-office');
+            
+            const taskHead = document.getElementById('task-opt-head');
+            const taskDep = document.getElementById('task-opt-deputy');
+            const taskOff = document.getElementById('task-opt-office');
+
+            if(containerHead) containerHead.innerHTML = '';
+            if(listDeputy) listDeputy.innerHTML = ''; 
+            if(listOffice) listOffice.innerHTML = '';
+            
+            if(filterHead) filterHead.innerHTML = '';
+            if(filterDep) filterDep.innerHTML = ''; 
+            if(filterOff) filterOff.innerHTML = '';
+            
+            if(taskHead) taskHead.innerHTML = '';
+            if(taskDep) taskDep.innerHTML = ''; 
+            if(taskOff) taskOff.innerHTML = '';
+            
+            assigneeEmails = {};
+            assigneeTelegram = {};
+
+            const isAdmin = currentLoggedUser && currentLoggedUser.role === 'admin';
+
+            appMembers.forEach(m => {
+                assigneeEmails[m.name] = m.email;
+                assigneeTelegram[m.name] = m.telegram;
+
+                const initials = getInitials(m.name);
+                const optionLabel = m.role === 'office' && m.office ? `${m.name} (${m.office})` : m.name;
+                
+                if (m.role === 'head') {
+                    if(filterHead) filterHead.appendChild(new Option(optionLabel, m.name));
+                    if(taskHead) taskHead.appendChild(new Option(optionLabel, m.name));
+                } else if (m.role === 'deputy') {
+                    if(filterDep) filterDep.appendChild(new Option(optionLabel, m.name));
+                    if(taskDep) taskDep.appendChild(new Option(optionLabel, m.name));
+                } else {
+                    if(filterOff) filterOff.appendChild(new Option(optionLabel, m.name));
+                    if(taskOff) taskOff.appendChild(new Option(optionLabel, m.name));
+                }
+
+                if (m.role === 'head') {
+                    const li = document.createElement('div');
+                    li.className = `ml-7 flex items-center justify-between gap-2 bg-white/70 p-1.5 rounded-lg border border-blue-100/50 w-full hover:bg-white transition-colors shadow-sm group ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`;
+                    if(isAdmin) li.setAttribute('onclick', `setFilter('${m.name}')`);
+                    
+                    const actionBtns = isAdmin ? `
+                        <div class="hidden group-hover:flex items-center gap-1 shrink-0 pr-1">
+                            <button onclick="event.stopPropagation(); editMember('${m.name}')" class="w-7 h-7 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md flex items-center justify-center transition-colors shadow-sm border border-transparent hover:border-blue-100" title="កែសម្រួល"><i class="fa-solid fa-pen text-[11px]"></i></button>
+                            <button onclick="event.stopPropagation(); deleteMember('${m.name}')" class="w-7 h-7 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md flex items-center justify-center transition-colors shadow-sm border border-transparent hover:border-red-100" title="លុប"><i class="fa-solid fa-trash-can text-[11px]"></i></button>
+                        </div>
+                    ` : '';
+
+                    li.innerHTML = `
+                        <div class="flex items-center gap-2.5 overflow-hidden">
+                            <div class="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold shadow-sm ring-2 ring-blue-200 shrink-0">${initials}</div>
+                            <span class="text-sm font-bold text-gray-800 truncate">${m.name}</span>
+                        </div>
+                        ${actionBtns}
+                    `;
+                    if(containerHead) containerHead.appendChild(li);
+                } else {
+                    const li = document.createElement('li');
+                    li.className = `flex items-center justify-between p-1.5 hover:bg-gray-100 rounded-md transition-colors group ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`;
+                    if(isAdmin) li.setAttribute('onclick', `setFilter('${m.name}')`);
+                    
+                    const bgColor = m.role === 'deputy' ? 'bg-indigo-100' : 'bg-teal-100';
+                    const textColor = m.role === 'deputy' ? 'text-indigo-700' : 'text-teal-700';
+
+                    let leftContent = `<div class="flex items-center gap-2 overflow-hidden"><div class="w-6 h-6 rounded-full ${bgColor} ${textColor} flex items-center justify-center text-[10px] shadow-sm shrink-0">${initials}</div> <span class="font-bold text-sm truncate">${m.name}</span></div>`;
+                    if(m.role === 'office') {
+                        leftContent = `<div class="flex flex-col overflow-hidden"><div class="flex items-center gap-2"><div class="w-6 h-6 rounded-full ${bgColor} ${textColor} flex items-center justify-center text-[10px] shadow-sm shrink-0">${initials}</div> <span class="font-bold text-sm truncate">${m.name}</span></div><span class="text-[10px] text-gray-400 ml-8 font-normal truncate">${m.office || 'ការិយាល័យថ្មី'}</span></div>`;
+                    }
+
+                    const actionBtns = isAdmin ? `
+                        <div class="hidden group-hover:flex items-center gap-1 shrink-0">
+                            <button onclick="event.stopPropagation(); editMember('${m.name}')" class="w-7 h-7 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md flex items-center justify-center transition-colors shadow-sm border border-transparent hover:border-blue-100" title="កែសម្រួល"><i class="fa-solid fa-pen text-[11px]"></i></button>
+                            <button onclick="event.stopPropagation(); deleteMember('${m.name}')" class="w-7 h-7 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md flex items-center justify-center transition-colors shadow-sm border border-transparent hover:border-red-100" title="លុប"><i class="fa-solid fa-trash-can text-[11px]"></i></button>
+                        </div>
+                    ` : '';
+
+                    li.innerHTML = `
+                        ${leftContent}
+                        ${actionBtns}
+                    `;
+
+                    if (m.role === 'deputy') {
+                        if(listDeputy) listDeputy.appendChild(li);
+                    } else {
+                        if(listOffice) listOffice.appendChild(li);
+                    }
+                }
+            });
+            saveMembersToStorage();
+        }
+
+        function saveMember(e) {
+            e.preventDefault();
+            const name = document.getElementById('newMemberName').value.trim();
+            const role = document.getElementById('newMemberRole').value;
+            const office = document.getElementById('newMemberOffice').value.trim();
+            const email = document.getElementById('newMemberEmail').value.trim();
+            const telegram = document.getElementById('newMemberTelegram').value.trim();
+
+            if (!name) return;
+
+            if (editingMemberName) {
+                const index = appMembers.findIndex(m => m.name === editingMemberName);
+                if (index > -1) {
+                    appMembers[index] = { name, role, office, email, telegram };
+                    if (name !== editingMemberName) {
+                        tasks.forEach(t => { if(t.assignee === editingMemberName) t.assignee = name; });
+                        
+                        let isSysUpdated = false;
+                        systemUsers.forEach(u => { 
+                            if(u.linkedMember === editingMemberName) {
+                                u.linkedMember = name;
+                                isSysUpdated = true;
+                            }
+                        });
+                        if(isSysUpdated) saveSystemUsers();
+
+                        if(currentFilter === editingMemberName) currentFilter = name;
+                        saveTasksToStorage();
+                    }
+                }
+                showToast(`បានធ្វើបច្ចុប្បន្នភាពបុគ្គលិកឈ្មោះ ${name} រួចរាល់!`, 'success');
+            } else {
+                if (appMembers.some(m => m.name === name)) {
+                    showToast('ឈ្មោះនេះមានរួចហើយនៅក្នុងប្រព័ន្ធ!', 'error');
+                    return;
+                }
+                appMembers.push({ name, role, office, email, telegram });
+                showToast(`បានបន្ថែមសមាសភាពថ្មីឈ្មោះ ${name} ដោយជោគជ័យ!`, 'success');
+            }
+
+            saveMembersToStorage();
+            renderMembers();
+            renderTasks();
+            closeAddMemberModal();
+        }
+
+        function editMember(name) {
+            const member = appMembers.find(m => m.name === name);
+            if(!member) return;
+            editingMemberName = name;
+            
+            document.getElementById('newMemberName').value = member.name;
+            document.getElementById('newMemberRole').value = member.role;
+            document.getElementById('newMemberOffice').value = member.office || '';
+            document.getElementById('newMemberEmail').value = member.email || '';
+            document.getElementById('newMemberTelegram').value = member.telegram || '';
+            
+            toggleOfficeInput();
+            document.getElementById('addMemberModalTitle').innerHTML = `<i class="fa-solid fa-user-pen mr-2"></i>កែប្រែព័ត៌មានបុគ្គលិក`;
+
+            const modal = document.getElementById('addMemberModal');
+            const content = document.getElementById('memberModalContent');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function deleteMember(name) {
+            appMembers = appMembers.filter(m => m.name !== name);
+            if (currentFilter === name) currentFilter = 'all';
+            
+            saveMembersToStorage();
+            renderMembers();
+            renderTasks();
+            showToast(`បានលុបបុគ្គលិកឈ្មោះ ${name} រួចរាល់!`, 'info');
+        }
+
+        function dragStart(e) {
+            draggedTask = e.target;
+            setTimeout(() => e.target.classList.add('dragging'), 0);
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', e.target.id);
+        }
+        function dragEnd(e) {
+            e.target.classList.remove('dragging');
+            draggedTask = null;
+            document.querySelectorAll('.kanban-col').forEach(col => col.classList.remove('drag-over'));
+        }
+        function allowDrop(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+        function dragEnter(e) {
+            e.preventDefault();
+            let dropZone = e.target.closest('.kanban-col');
+            if(dropZone) dropZone.classList.add('drag-over');
+        }
+        function dragLeave(e) {
+            let dropZone = e.target.closest('.kanban-col');
+            if(dropZone && !dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over');
+        }
+        function drop(e) {
+            e.preventDefault();
+            let dropZone = e.target.closest('.kanban-col');
+            if (dropZone && draggedTask) {
+                dropZone.classList.remove('drag-over');
+                updateTaskStatus(draggedTask.id, dropZone.id);
+            }
+        }
+        function moveTaskMobile(taskId, direction) {
+            const taskIndex = tasks.findIndex(t => t.id === taskId);
+            if (taskIndex === -1) return;
+            const currentIdx = columnsOrder.indexOf(tasks[taskIndex].status);
+            let newIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
+            if (newIdx >= 0 && newIdx < columnsOrder.length) updateTaskStatus(taskId, columnsOrder[newIdx]);
+        }
+        function updateTaskStatus(taskId, newStatus) {
+            const taskIndex = tasks.findIndex(t => t.id === taskId);
+            if (taskIndex > -1) {
+                tasks[taskIndex].status = newStatus;
+                saveTasksToStorage();
+                renderTasks(); 
+            }
+        }
+
+        function filterTasks() {
+            currentFilter = document.getElementById('filterAssignee').value;
+            renderTasks();
+        }
+        function setFilter(assigneeName) {
+            document.getElementById('filterAssignee').value = assigneeName;
+            filterTasks();
+            if(window.innerWidth < 1024) toggleSidebar(); 
+        }
+        function openModal() {
+            const modal = document.getElementById('taskModal');
+            const content = document.getElementById('modalContent');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('taskDeadline').min = now.toISOString().slice(0,16);
+            
+            const assigneeSelect = document.getElementById('taskAssignee');
+            if (currentLoggedUser && currentLoggedUser.role !== 'admin') {
+                const allowedMember = currentLoggedUser.linkedMember || currentLoggedUser.username;
+                assigneeSelect.value = allowedMember;
+                assigneeSelect.disabled = true;
+                assigneeSelect.classList.add('bg-gray-200', 'cursor-not-allowed', 'opacity-70');
+            } else {
+                assigneeSelect.disabled = false;
+                assigneeSelect.classList.remove('bg-gray-200', 'cursor-not-allowed', 'opacity-70');
+                assigneeSelect.value = "";
+            }
+
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('taskModal');
+            const content = document.getElementById('modalContent');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => { 
+                modal.classList.add('hidden'); 
+                modal.classList.remove('flex'); 
+                document.getElementById('taskForm').reset(); 
+            }, 300);
+        }
+
+        function saveTask(e) {
+            e.preventDefault();
+            const title = document.getElementById('taskTitle').value.trim();
+            const assignee = document.getElementById('taskAssignee').value;
+            const startDate = document.getElementById('taskStartDate').value;
+            const deadline = document.getElementById('taskDeadline').value;
+            const status = document.getElementById('taskStatus').value;
+            const comment = document.getElementById('taskComment').value;
+            
+            const newTask = {
+                id: 'task-' + Date.now(),
+                title: title,
+                assignee: assignee,
+                startDate: new Date(startDate).toISOString(),
+                deadline: new Date(deadline).toISOString(),
+                status: status,
+                comment: comment,
+                progressHistory: [],
+                reminderDate: null
+            };
+            
+            tasks.push(newTask);
+            
+            if(currentFilter !== 'all' && currentFilter !== assignee) {
+                document.getElementById('filterAssignee').value = assignee;
+                currentFilter = assignee;
+            }
+            
+            saveTasksToStorage();
+            renderTasks();
+            closeModal();
+            showToast('បានបន្ថែមការងារថ្មីដោយជោគជ័យ!', 'success');
+        }
+
+        function deleteTask(id) {
+            tasks = tasks.filter(t => t.id !== id);
+            saveTasksToStorage();
+            renderTasks();
+            showToast('បានលុបការងារ!', 'info');
+        }
+
+        function closeViewModal() {
+            const modal = document.getElementById('viewTaskModal');
+            const content = document.getElementById('viewModalContent');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); currentViewingTaskId = null; }, 300);
+        }
+
+        function openViewModal(taskId) {
+            currentViewingTaskId = taskId;
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            document.getElementById('viewTaskTitle').textContent = task.title;
+            document.getElementById('viewTaskAssigneeAvatar').textContent = getInitials(task.assignee);
+            document.getElementById('viewTaskAssignee').textContent = task.assignee;
+            
+            const emailEl = document.getElementById('viewTaskAssigneeEmail');
+            const emailSpan = emailEl.querySelector('span');
+            const email = assigneeEmails[task.assignee];
+            if (email && email !== '') {
+                emailSpan.textContent = email;
+                emailEl.href = 'mailto:' + email;
+                emailEl.classList.remove('opacity-50', 'pointer-events-none');
+            } else {
+                emailSpan.textContent = 'មិនមានអ៊ីមែល';
+                emailEl.href = '#';
+                emailEl.classList.add('opacity-50', 'pointer-events-none');
+            }
+
+            const teleEl = document.getElementById('viewTaskAssigneeTelegram');
+            const teleSpan = teleEl.querySelector('span');
+            const tele = assigneeTelegram[task.assignee];
+            if (tele && tele !== '') {
+                teleSpan.textContent = tele;
+                let teleLink = tele;
+                if (tele.startsWith('@')) teleLink = 'https://t.me/' + tele.substring(1);
+                else if (!tele.startsWith('http')) teleLink = 'https://t.me/' + tele;
+                teleEl.href = teleLink;
+                teleEl.classList.remove('opacity-50', 'pointer-events-none');
+            } else {
+                teleSpan.textContent = 'មិនមាន Telegram';
+                teleEl.href = '#';
+                teleEl.classList.add('opacity-50', 'pointer-events-none');
+            }
+
+            document.getElementById('contactDisplayMode').classList.remove('hidden');
+            document.getElementById('contactEditMode').classList.add('hidden');
+            document.getElementById('contactEditMode').classList.remove('flex');
+
+            document.getElementById('viewStartDateDisplay').classList.remove('hidden');
+            document.getElementById('btnEditStartDate').classList.remove('hidden');
+            document.getElementById('viewStartDateEditForm').classList.add('hidden');
+            document.getElementById('viewStartDateEditForm').classList.remove('flex');
+
+            document.getElementById('viewTaskStartDate').textContent = formatDateKhmer(task.startDate || task.deadline);
+            document.getElementById('viewTaskDeadline').textContent = formatDateKhmer(task.deadline);
+            
+            const statusEl = document.getElementById('viewTaskStatus');
+            statusEl.textContent = statusLabels[task.status];
+            if (task.status === 'todo') statusEl.className = 'bg-gray-100 border border-gray-200 text-gray-800 font-bold text-sm py-1.5 px-4 rounded-full shadow-sm inline-block';
+            else if (task.status === 'in_progress') statusEl.className = 'bg-blue-100 border border-blue-200 text-blue-800 font-bold text-sm py-1.5 px-4 rounded-full shadow-sm inline-block';
+            else if (task.status === 'delayed') statusEl.className = 'bg-orange-100 border border-orange-200 text-orange-800 font-bold text-sm py-1.5 px-4 rounded-full shadow-sm inline-block';
+            else if (task.status === 'overdue') statusEl.className = 'bg-red-100 border border-red-200 text-red-800 font-bold text-sm py-1.5 px-4 rounded-full shadow-sm inline-block';
+            else if (task.status === 'done') statusEl.className = 'bg-green-100 border border-green-200 text-green-800 font-bold text-sm py-1.5 px-4 rounded-full shadow-sm inline-block';
+
+            const commentSection = document.getElementById('viewCommentSection');
+            commentSection.classList.remove('hidden');
+            
+            if (task.comment && task.comment.trim() !== '') {
+                document.getElementById('viewTaskComment').textContent = task.comment;
+                document.getElementById('viewTaskComment').classList.remove('text-gray-400');
+            } else {
+                document.getElementById('viewTaskComment').textContent = 'មិនទាន់មានព័ត៌មានលម្អិតបញ្ជាក់នៅឡើយទេ...';
+                document.getElementById('viewTaskComment').classList.add('text-gray-400');
+            }
+            
+            document.getElementById('editTaskCommentInput').value = task.comment || '';
+            document.getElementById('viewCommentDisplay').classList.remove('hidden');
+            document.getElementById('editCommentForm').classList.add('hidden');
+            document.getElementById('editCommentForm').classList.remove('flex');
+            document.getElementById('btnEditComment').classList.remove('hidden');
+
+            const historyContainer = document.getElementById('progressHistoryList');
+            const progressSection = document.getElementById('viewProgressSection');
+            historyContainer.innerHTML = '';
+            
+            if (task.progressHistory && task.progressHistory.length > 0) {
+                task.progressHistory.forEach(p => {
+                    historyContainer.innerHTML += `
+                        <div class="relative pl-4 border-l-2 border-blue-400 pb-1">
+                            <div class="absolute w-2 h-2 bg-blue-500 rounded-full -left-[5px] top-1.5 ring-2 ring-white"></div>
+                            <span class="text-[10px] text-gray-500 font-bold block mb-0.5">${formatDateKhmer(p.date)}</span>
+                            <p class="text-[13px] text-gray-700 leading-relaxed">${p.note}</p>
+                        </div>
+                    `;
+                });
+                progressSection.classList.remove('hidden');
+            } else {
+                progressSection.classList.add('hidden');
+            }
+
+            document.getElementById('newProgressNote').value = '';
+            const reminderInput = document.getElementById('newReminderDate');
+            if(task.reminderDate) {
+                const localRem = new Date(task.reminderDate);
+                localRem.setMinutes(localRem.getMinutes() - localRem.getTimezoneOffset());
+                reminderInput.value = localRem.toISOString().slice(0,16);
+            } else {
+                reminderInput.value = '';
+            }
+
+            const modal = document.getElementById('viewTaskModal');
+            const content = document.getElementById('viewModalContent');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function addToGoogleCalendar() {
+            if (!currentViewingTaskId) return;
+            const task = tasks.find(t => t.id === currentViewingTaskId);
+            if (!task) return;
+            const formatDateForGoogle = (isoString) => new Date(isoString).toISOString().replace(/-|:|\.\d\d\d/g, '');
+            const startDate = formatDateForGoogle(task.startDate || task.deadline);
+            const endDate = formatDateForGoogle(task.deadline);
+            let details = `អ្នកទទួលបន្ទុក៖ ${task.assignee}\nស្ថានភាព៖ ${statusLabels[task.status]}\n\n`;
+            if (task.comment) details += `ព័ត៌មានលម្អិត៖\n${task.comment}`;
+            const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(task.title)}&dates=${startDate}/${endDate}&details=${encodeURIComponent(details)}`;
+            window.open(googleCalendarUrl, '_blank');
+            showToast('កំពុងបើក Google Calendar សម្រាប់តម្លើងម៉ោងរំលឹក...', 'success');
+        }
+
+        function submitProgress() {
+            if (!currentViewingTaskId) return;
+            const task = tasks.find(t => t.id === currentViewingTaskId);
+            if (!task) return;
+            const note = document.getElementById('newProgressNote').value.trim();
+            const remDate = document.getElementById('newReminderDate').value;
+            let isUpdated = false;
+            if (!task.progressHistory) task.progressHistory = [];
+            if (note) { task.progressHistory.push({ date: new Date().toISOString(), note: note }); isUpdated = true; }
+            if (remDate) {
+                task.reminderDate = new Date(remDate).toISOString();
+                alertHistory.delete(task.id + '_custom_reminder');
+                isUpdated = true;
+            } else if (task.reminderDate !== null) { task.reminderDate = null; isUpdated = true; }
+            if(isUpdated) {
+                saveTasksToStorage();
+                showToast('បានធ្វើបច្ចុប្បន្នភាពវឌ្ឍនភាពជោគជ័យ!', 'success');
+                renderTasks(); 
+                openViewModal(task.id); 
+            }
+        }
+
+        function toggleEditStartDate() {
+            const form = document.getElementById('viewStartDateEditForm');
+            if (form.classList.contains('hidden')) {
+                document.getElementById('viewStartDateDisplay').classList.add('hidden');
+                document.getElementById('btnEditStartDate').classList.add('hidden');
+                form.classList.remove('hidden'); form.classList.add('flex');
+                const task = tasks.find(t => t.id === currentViewingTaskId);
+                if (task) {
+                    const localIso = new Date(task.startDate || task.deadline);
+                    localIso.setMinutes(localIso.getMinutes() - localIso.getTimezoneOffset());
+                    document.getElementById('editStartDateInput').value = localIso.toISOString().slice(0,16);
+                }
+            } else {
+                document.getElementById('viewStartDateDisplay').classList.remove('hidden');
+                document.getElementById('btnEditStartDate').classList.remove('hidden');
+                form.classList.add('hidden'); form.classList.remove('flex');
+            }
+        }
+
+        function saveStartDate() {
+            if (!currentViewingTaskId) return;
+            const task = tasks.find(t => t.id === currentViewingTaskId);
+            if (!task) return;
+            const newVal = document.getElementById('editStartDateInput').value;
+            if (!newVal) return showToast('សូមជ្រើសរើសថ្ងៃចាប់ផ្តើមថ្មី!', 'warning');
+            const newStartDate = new Date(newVal).toISOString();
+            if (task.startDate !== newStartDate) {
+                const oldStartDate = task.startDate || task.deadline;
+                task.startDate = newStartDate;
+                if (!task.progressHistory) task.progressHistory = [];
+                task.progressHistory.push({ date: new Date().toISOString(), note: `បានប្តូរថ្ងៃចាប់ផ្តើម ពី៖ ${formatDateKhmer(oldStartDate)} ទៅជា៖ ${formatDateKhmer(newStartDate)}` });
+                saveTasksToStorage();
+                showToast('បានធ្វើបច្ចុប្បន្នភាពថ្ងៃចាប់ផ្តើម!', 'success');
+                renderTasks(); openViewModal(task.id);
+            } else toggleEditStartDate();
+        }
+
+        function toggleEditDeadline() {
+            const form = document.getElementById('viewDeadlineEditForm');
+            if (form.classList.contains('hidden')) {
+                document.getElementById('viewDeadlineDisplay').classList.add('hidden');
+                document.getElementById('btnEditDeadline').classList.add('hidden');
+                form.classList.remove('hidden'); form.classList.add('flex');
+                const task = tasks.find(t => t.id === currentViewingTaskId);
+                if (task) {
+                    const localIso = new Date(task.deadline);
+                    localIso.setMinutes(localIso.getMinutes() - localIso.getTimezoneOffset());
+                    document.getElementById('editDeadlineInput').value = localIso.toISOString().slice(0,16);
+                }
+            } else {
+                document.getElementById('viewDeadlineDisplay').classList.remove('hidden');
+                document.getElementById('btnEditDeadline').classList.remove('hidden');
+                form.classList.add('hidden'); form.classList.remove('flex');
+            }
+        }
+
+        function saveDeadline() {
+            if (!currentViewingTaskId) return;
+            const task = tasks.find(t => t.id === currentViewingTaskId);
+            if (!task) return;
+            const newVal = document.getElementById('editDeadlineInput').value;
+            if (!newVal) return showToast('សូមជ្រើសរើសកាលបរិច្ឆេទថ្មី!', 'warning');
+            const newDeadline = new Date(newVal).toISOString();
+            if (task.deadline !== newDeadline) {
+                const oldDeadline = task.deadline;
+                task.deadline = newDeadline;
+                if (!task.progressHistory) task.progressHistory = [];
+                task.progressHistory.push({ date: new Date().toISOString(), note: `បានប្តូរកាលកំណត់បញ្ចប់ ពី៖ ${formatDateKhmer(oldDeadline)} ទៅជា៖ ${formatDateKhmer(newDeadline)}` });
+                saveTasksToStorage();
+                showToast('បានធ្វើបច្ចុប្បន្នភាពកាលកំណត់!', 'success');
+                renderTasks(); openViewModal(task.id);
+            } else toggleEditDeadline();
+        }
+
+        function toggleEditComment() {
+            const form = document.getElementById('editCommentForm');
+            if (form.classList.contains('hidden')) {
+                document.getElementById('viewCommentDisplay').classList.add('hidden');
+                document.getElementById('btnEditComment').classList.add('hidden');
+                form.classList.remove('hidden'); form.classList.add('flex');
+                document.getElementById('editTaskCommentInput').focus();
+            } else {
+                document.getElementById('viewCommentDisplay').classList.remove('hidden');
+                document.getElementById('btnEditComment').classList.remove('hidden');
+                form.classList.add('hidden'); form.classList.remove('flex');
+            }
+        }
+
+        function saveEditedComment() {
+            if (!currentViewingTaskId) return;
+            const task = tasks.find(t => t.id === currentViewingTaskId);
+            if (!task) return;
+            const newComment = document.getElementById('editTaskCommentInput').value.trim();
+            const oldComment = task.comment || '';
+            if (newComment !== oldComment) {
+                task.comment = newComment;
+                if (!task.progressHistory) task.progressHistory = [];
+                let note = oldComment === '' ? `បានបន្ថែមព័ត៌មានលម្អិតថ្មី៖ "${newComment}"` : (newComment === '' ? `បានលុបព័ត៌មានលម្អិតចោល` : `បានកែតម្រូវព័ត៌មានលម្អិត`);
+                task.progressHistory.push({ date: new Date().toISOString(), note: note });
+                saveTasksToStorage();
+                showToast('បានរក្សាទុកវឌ្ឍនភាពជោគជ័យ!', 'success');
+                renderTasks(); openViewModal(task.id); 
+            } else toggleEditComment(); 
+        }
+
+        function toggleEditContact() {
+            const edit = document.getElementById('contactEditMode');
+            if (edit.classList.contains('hidden')) {
+                document.getElementById('contactDisplayMode').classList.add('hidden');
+                edit.classList.remove('hidden'); edit.classList.add('flex');
+                const task = tasks.find(t => t.id === currentViewingTaskId);
+                if (task) {
+                    document.getElementById('editEmailInput').value = assigneeEmails[task.assignee] || '';
+                    document.getElementById('editTelegramInput').value = assigneeTelegram[task.assignee] || '';
+                }
+            } else {
+                document.getElementById('contactDisplayMode').classList.remove('hidden');
+                edit.classList.add('hidden'); edit.classList.remove('flex');
+            }
+        }
+
+        function saveContactInfo() {
+            if (!currentViewingTaskId) return;
+            const task = tasks.find(t => t.id === currentViewingTaskId);
+            if (!task) return;
+            const newEmail = document.getElementById('editEmailInput').value.trim();
+            const newTele = document.getElementById('editTelegramInput').value.trim();
+            const memberIndex = appMembers.findIndex(m => m.name === task.assignee);
+            if (memberIndex > -1) {
+                appMembers[memberIndex].email = newEmail;
+                appMembers[memberIndex].telegram = newTele;
+                saveMembersToStorage();
+            }
+            assigneeEmails[task.assignee] = newEmail;
+            assigneeTelegram[task.assignee] = newTele;
+            
+            toggleEditContact();
+            openViewModal(task.id);
+            showToast(`បានធ្វើបច្ចុប្បន្នភាពទំនាក់ទំនង!`, 'success');
+        }
+
+        function renderTasks() {
+            columnsOrder.forEach(colId => { const el = document.getElementById(colId); if(el) el.innerHTML = ''; });
+            
+            let tasksToRender = [];
+            if (currentLoggedUser && currentLoggedUser.role !== 'admin') {
+                const allowedMember = currentLoggedUser.linkedMember || currentLoggedUser.username;
+                tasksToRender = tasks.filter(t => t.assignee === allowedMember);
+            } else {
+                tasksToRender = currentFilter === 'all' ? [...tasks] : tasks.filter(t => t.assignee === currentFilter);
+            }
+            
+            tasksToRender.sort((a, b) => a.assignee.localeCompare(b.assignee, 'km'));
+
+            tasksToRender.forEach(task => {
+                const col = document.getElementById(task.status);
+                if(!col) return;
+                const taskEl = document.createElement('div');
+                taskEl.className = 'task-card bg-white p-3.5 rounded-xl shadow-sm hover:shadow-md border border-gray-100 relative group select-none flex flex-col gap-2 cursor-pointer transition-all hover:border-blue-300';
+                taskEl.draggable = true; taskEl.id = task.id;
+                taskEl.onclick = () => openViewModal(task.id);
+                taskEl.addEventListener('dragstart', dragStart); taskEl.addEventListener('dragend', dragEnd);
+
+                const hasReminder = task.reminderDate ? `<i class="fa-solid fa-bell text-blue-500 animate-pulse text-[10px] ml-2"></i>` : '';
+                const currIdx = columnsOrder.indexOf(task.status);
+                const showPrev = currIdx > 0 ? '' : 'invisible';
+                const showNext = currIdx < columnsOrder.length - 1 ? '' : 'invisible';
+                
+                const isAdmin = currentLoggedUser && currentLoggedUser.role === 'admin';
+                const deleteBtn = isAdmin ? `<button onclick="event.stopPropagation(); deleteTask('${task.id}')" class="text-gray-300 hover:text-red-500 md:opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2 w-7 h-7 flex items-center justify-center rounded-md hover:bg-red-50 z-10"><i class="fa-solid fa-trash-can text-sm"></i></button>` : '';
+
+                taskEl.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <h4 class="text-[14px] md:text-[15px] font-bold text-gray-800 leading-tight pr-6">${task.title} ${hasReminder}</h4>
+                        ${deleteBtn}
+                    </div>
+                    <div class="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg w-max border border-slate-100 mt-1">
+                        <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">${getInitials(task.assignee)}</div>
+                        <span class="text-xs font-bold text-gray-700">${task.assignee}</span>
+                    </div>
+                    ${task.comment ? `<div class="mt-2 text-[11px] text-gray-600 bg-yellow-50 p-2 rounded-lg border border-yellow-100 italic leading-relaxed line-clamp-2"><i class="fa-regular fa-comment-dots mr-1 text-yellow-600"></i> ${task.comment}</div>` : ''}
+                    <div class="deadline-container flex flex-col gap-1.5 mt-2 pt-2 border-t border-gray-50">
+                        <div class="flex items-center justify-between w-full">
+                            <div class="flex items-center gap-1.5 text-xs font-bold text-gray-500"><i class="fa-regular fa-calendar-check text-blue-500"></i><span class="mt-0.5">ចាប់ផ្តើម៖ ${formatDateKhmer(task.startDate || task.deadline)}</span></div>
+                        </div>
+                        <div class="flex items-center justify-between w-full">
+                            <div class="flex items-center gap-1.5 text-xs font-bold deadline-text text-gray-500"><i class="fa-regular fa-clock"></i><span class="mt-0.5">បញ្ចប់៖ <span class="ml-1">${formatDateKhmer(task.deadline)}</span></span></div>
+                            <div class="status-badge hidden text-[10px] font-bold px-2 py-0.5 rounded-full"></div>
+                        </div>
+                    </div>
+                    <div class="md:hidden flex justify-between items-center mt-2 pt-2 border-t border-gray-100 z-10 relative">
+                         <button onclick="event.stopPropagation(); moveTaskMobile('${task.id}', 'prev')" class="text-gray-400 hover:text-blue-600 px-3 py-1.5 bg-gray-50 hover:bg-blue-50 rounded-lg text-xs font-bold transition-colors ${showPrev}"><i class="fa-solid fa-chevron-left mr-1"></i> ថយ</button>
+                         <button onclick="event.stopPropagation(); moveTaskMobile('${task.id}', 'next')" class="text-gray-400 hover:text-blue-600 px-3 py-1.5 bg-gray-50 hover:bg-blue-50 rounded-lg text-xs font-bold transition-colors ${showNext}">ទៅមុខ <i class="fa-solid fa-chevron-right ml-1"></i></button>
+                    </div>
+                `;
+                col.appendChild(taskEl);
+            });
+            updateCounts(); checkDeadlines(); 
+        }
+
+        function updateCounts() {
+            let visibleTasks = [];
+            if (currentLoggedUser && currentLoggedUser.role !== 'admin') {
+                const allowedMember = currentLoggedUser.linkedMember || currentLoggedUser.username;
+                visibleTasks = tasks.filter(t => t.assignee === allowedMember);
+            } else {
+                visibleTasks = currentFilter === 'all' ? tasks : tasks.filter(t => t.assignee === currentFilter);
+            }
+            
+            columnsOrder.forEach(status => {
+                const countEl = document.getElementById(`count-${status}`);
+                if (countEl) countEl.textContent = visibleTasks.filter(t => t.status === status).length;
+            });
+        }
+
+        function checkDeadlines() {
+            const now = new Date();
+            const oneDay = 24 * 60 * 60 * 1000; 
+            let needsRender = false;
+
+            tasks.forEach(task => {
+                const el = document.getElementById(task.id);
+                if (!el) return; 
+                const deadline = new Date(task.deadline);
+                const timeDiff = deadline.getTime() - now.getTime();
+                
+                // ផ្លាស់ទីការងារហួសពេលទៅជួរ "កំពុងពន្យាពេល" ដោយស្វ័យប្រវត្តិ
+                if (timeDiff < 0 && task.status !== 'done' && task.status !== 'delayed' && task.status !== 'overdue') {
+                    task.status = 'delayed';
+                    if (!task.progressHistory) task.progressHistory = [];
+                    task.progressHistory.push({ 
+                        date: new Date().toISOString(), 
+                        note: `ប្រព័ន្ធបានផ្លាស់ប្តូរទីតាំងការងារដោយស្វ័យប្រវត្តិ ទៅកាន់ជួរ "កំពុងពន្យាពេល" ដោយសារបានហួសកាលកំណត់។` 
+                    });
+                    needsRender = true;
+                    showToast(`ការងារ "${task.title}" ត្រូវបានបញ្ជូនទៅជួរពន្យាពេលដោយស្វ័យប្រវត្តិ!`, 'warning');
+                }
+
+                const deadlineText = el.querySelector('.deadline-text');
+                const badge = el.querySelector('.status-badge');
+                
+                if (task.reminderDate && task.status !== 'done') {
+                    const remTime = new Date(task.reminderDate).getTime();
+                    if (now.getTime() >= remTime && !alertHistory.has(task.id + '_custom_reminder')) {
+                        showToast(`សាររំលឹក: ដល់ពេលត្រូវធ្វើបច្ចុប្បន្នភាពការងារ "${task.title}"`, 'info');
+                        alertHistory.add(task.id + '_custom_reminder');
+                    }
+                }
+                el.classList.remove('border-red-300', 'border-orange-300', 'bg-red-50/40', 'bg-orange-50/40');
+                badge.classList.add('hidden');
+                deadlineText.className = 'flex items-center gap-1.5 text-xs font-bold deadline-text text-gray-500';
+                
+                // បន្ថែមមុខងាររំលឹក សម្រាប់ការងារដែលកំពុងពន្យាពេល (Delayed)
+                if (task.status === 'delayed') {
+                    if (!alertHistory.has(task.id + '_delayed_warning')) {
+                        showToast(`ក្រើនរំលឹក៖ ការងារ "${task.title}" កំពុងពន្យាពេល! សូមត្រួតពិនិត្យ និងចាត់វិធានការ។`, 'warning');
+                        alertHistory.add(task.id + '_delayed_warning');
+                    }
+                }
+
+                if (task.status === 'done') return;
+                if (timeDiff < 0) { 
+                    el.classList.add('border-red-300', 'bg-red-50/40');
+                    deadlineText.classList.remove('text-gray-500'); deadlineText.classList.add('text-red-600');
+                    badge.textContent = 'ហួសពេលកំណត់'; badge.className = 'status-badge text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 bg-red-100 text-red-700 border border-red-200 block';
+                } else if (timeDiff < oneDay) { 
+                    el.classList.add('border-orange-300', 'bg-orange-50/40');
+                    deadlineText.classList.remove('text-gray-500'); deadlineText.classList.add('text-orange-600');
+                    badge.textContent = 'ជិតដល់ពេល'; badge.className = 'status-badge text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 bg-orange-100 text-orange-700 border border-orange-200 block';
+                }
+            });
+
+            if (needsRender) {
+                saveTasksToStorage();
+                renderTasks();
+            }
+        }
+
+        function formatDateKhmer(dateString) {
+            const date = new Date(dateString);
+            const formatter = new Intl.DateTimeFormat('km-KH', { 
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+            return formatter.format(date);
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            let bgClass = 'bg-blue-600'; let iconClass = 'fa-circle-info';
+            if(type === 'error') { bgClass = 'bg-red-600'; iconClass = 'fa-circle-exclamation'; }
+            if(type === 'warning') { bgClass = 'bg-orange-500'; iconClass = 'fa-triangle-exclamation'; }
+            if(type === 'success') { bgClass = 'bg-green-600'; iconClass = 'fa-circle-check'; }
+
+            toast.className = `${bgClass} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 transform transition-all duration-300 translate-x-full opacity-0 max-w-sm pointer-events-auto border border-white/20`;
+            toast.innerHTML = `<i class="fa-solid ${iconClass} text-lg"></i><p class="text-sm font-bold mt-0.5">${message}</p>`;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('translate-x-full', 'opacity-0'));
+            setTimeout(() => { toast.classList.add('translate-x-full', 'opacity-0'); setTimeout(() => toast.remove(), 300); }, 4000);
+        }
+
+        window.onload = () => {
+            setInterval(checkDeadlines, 60000); 
+        };
+    </script>
+</body>
+</html>
